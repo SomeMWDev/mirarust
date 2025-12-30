@@ -22,13 +22,14 @@ struct Cli {
     script: Vec<String>,
 }
 
-
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+
     let script = cli.script;
     if script.is_empty() {
         bail!("Please provide a script to run!")
     }
+
     let output = Command::new("/usr/bin/php")
         .args(["-r", PHP_CODE, cli.db_list.as_os_str().to_str().unwrap()])
         .output()
@@ -39,10 +40,12 @@ fn main() -> anyhow::Result<()> {
             String::from_utf8_lossy(&output.stderr)
         )
     }
+
     let json = String::from_utf8(output.stdout)?;
     let clusters: HashMap<String, Vec<String>> = serde_json::from_str(json.as_str())
         .with_context(|| format!("Invalid JSON: {json}"))?;
     println!("Found databases on {} clusters.", &clusters.len());
+
     let handles: Vec<_> = clusters
         .into_iter()
         .map(|(cluster, dbs)| {
