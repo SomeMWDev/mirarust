@@ -3,6 +3,9 @@ name = "mirarust"
 version = "0.1.0"
 edition = "2024"
 
+[build]
+target = "x86_64-unknown-linux-musl"
+
 [[bin]]
 name = "foreachwikiindblist-parallel"
 path = "src/foreachwikiindblist-parallel.rs"
