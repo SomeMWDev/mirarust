@@ -1,0 +1,19 @@
+name: Lint code
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-rust-code:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: auguwu/clippy-action@1.4.0
+        with:
+          token: ${{secrets.GITHUB_TOKEN}}
+
+permissions:
+  checks: write
