@@ -21,6 +21,7 @@ struct Cli {
     db_list: PathBuf,
 
     /// The amount of threads to use per cluster at the same time
+    #[arg(long, short)]
     concurrent_cluster_threads: Option<usize>,
 
     #[arg(trailing_var_arg = true)]
