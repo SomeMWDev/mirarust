@@ -57,7 +57,7 @@ fn main() -> anyhow::Result<()> {
 
     let handles: Vec<_> = clusters
         .into_iter()
-        .map(|(cluster, dbs)| {
+        .flat_map(|(cluster, dbs)| {
             println!("Cluster {cluster} has {} dbs.", dbs.len());
             let dbs_arc = Arc::new(Mutex::new(dbs));
             let mut threads: Vec<JoinHandle<()>> = vec![];
@@ -108,7 +108,6 @@ fn main() -> anyhow::Result<()> {
             }
             threads
         })
-        .flatten()
         .collect();
 
     for handle in handles {
