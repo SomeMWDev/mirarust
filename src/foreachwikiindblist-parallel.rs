@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::{Arc, Mutex};
 use std::thread;
+use std::thread::JoinHandle;
 use anyhow::{bail, Context};
 use clap::{Parser};
 
@@ -18,6 +20,9 @@ echo json_encode($clusters);"#;
 struct Cli {
     db_list: PathBuf,
 
+    /// The amount of threads to use per cluster at the same time
+    concurrent_cluster_threads: Option<usize>,
+
     #[arg(trailing_var_arg = true)]
     script: Vec<String>,
 }
@@ -30,8 +35,12 @@ fn main() -> anyhow::Result<()> {
         bail!("Please provide a script to run!")
     }
 
+    let concurrent_threads = cli.concurrent_cluster_threads
+        .unwrap_or(1);
+
     let output = Command::new("/usr/bin/php")
-        .args(["-r", PHP_CODE, cli.db_list.as_os_str().to_str().unwrap()])
+        .args(["-r", PHP_CODE])
+        .arg(&cli.db_list)
         .output()
         .context("Failed to run PHP command")?;
     if !output.status.success() {
@@ -49,33 +58,57 @@ fn main() -> anyhow::Result<()> {
     let handles: Vec<_> = clusters
         .into_iter()
         .map(|(cluster, dbs)| {
-            println!("{} has {} dbs.", cluster, dbs.len());
-            let cmd = script.clone();
-            thread::spawn(move || {
-                for db in dbs {
-                    let out = Command::new(&cmd[0])
-                        .args(&cmd[1..])
-                        .args(["--wiki", &db])
-                        .output();
-                    match out {
-                        Err(e) => println!("Error on {db}: {:?}", e),
-                        Ok(output) => {
-                            println!("Script completed on {db} ({cluster})");
-                            let stdout_c = String::from_utf8_lossy(&output.stdout);
-                            let stderr_c = String::from_utf8_lossy(&output.stderr);
-                            let stdout = stdout_c.trim();
-                            let stderr = stderr_c.trim();
-                            if !stdout.is_empty() {
-                                println!("OUT: {stdout}");
-                            }
-                            if !stderr.is_empty() {
-                                eprintln!("ERR: {stderr}");
+            println!("Cluster {cluster} has {} dbs.", dbs.len());
+            let dbs_arc = Arc::new(Mutex::new(dbs));
+            let mut threads: Vec<JoinHandle<()>> = vec![];
+
+            for i in 0..concurrent_threads {
+                let cmd = script.clone();
+                let cluster = cluster.clone();
+                let dbs_arc = Arc::clone(&dbs_arc);
+
+                threads.push(thread::spawn(move || {
+                    println!("Starting thread {i} on {cluster}");
+                    loop {
+                        let db = {
+                            let mut dbs = dbs_arc.lock()
+                                .unwrap_or_else(|poisoned| poisoned.into_inner());
+                            dbs.pop()
+                        };
+
+                        let Some(db) = db else {
+                            println!("Ending thread {i} on {cluster}");
+                            break;
+                        };
+
+                        let out = Command::new(&cmd[0])
+                            .args(&cmd[1..])
+                            .args(["--wiki", &db])
+                            .output();
+                        match out {
+                            Err(e) => println!("{cluster}/{i} Error on {db}: {:?}", e),
+                            Ok(output) => {
+                                println!("{cluster}/{i} Script completed on {db} ({cluster})");
+
+                                let stdout_c = String::from_utf8_lossy(&output.stdout);
+                                let stderr_c = String::from_utf8_lossy(&output.stderr);
+                                let stdout = stdout_c.trim();
+                                let stderr = stderr_c.trim();
+
+                                if !stdout.is_empty() {
+                                    println!("{cluster}/{i} OUT: {stdout}");
+                                }
+                                if !stderr.is_empty() {
+                                    eprintln!("{cluster}/{i} ERR: {stderr}");
+                                }
                             }
                         }
                     }
-                }
-            })
+                }))
+            }
+            threads
         })
+        .flatten()
         .collect();
 
     for handle in handles {
