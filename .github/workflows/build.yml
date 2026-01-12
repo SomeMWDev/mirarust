@@ -13,7 +13,7 @@ jobs:
       - run: rustup target add x86_64-unknown-linux-musl
       - run: cargo build --profile release --target x86_64-unknown-linux-musl
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: foreachwikiindblist-parallel
           path: target/x86_64-unknown-linux-musl/release/foreachwikiindblist-parallel
