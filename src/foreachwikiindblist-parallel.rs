@@ -1,12 +1,11 @@
+use anyhow::{Context, bail};
+use clap::Parser;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
-use anyhow::{bail, Context};
-use clap::{Parser};
-
 
 const PHP_CODE: &str = r#"$config = include $argv[1];
 $clusters = [];
@@ -36,8 +35,7 @@ fn main() -> anyhow::Result<()> {
         bail!("Please provide a script to run!")
     }
 
-    let concurrent_threads = cli.concurrent_cluster_threads
-        .unwrap_or(1);
+    let concurrent_threads = cli.concurrent_cluster_threads.unwrap_or(1);
 
     let output = Command::new("/usr/bin/php")
         .args(["-r", PHP_CODE])
@@ -45,15 +43,12 @@ fn main() -> anyhow::Result<()> {
         .output()
         .context("Failed to run PHP command")?;
     if !output.status.success() {
-        bail!(
-            "PHP failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        )
+        bail!("PHP failed: {}", String::from_utf8_lossy(&output.stderr))
     }
 
     let json = String::from_utf8(output.stdout)?;
-    let clusters: HashMap<String, Vec<String>> = serde_json::from_str(json.as_str())
-        .with_context(|| format!("Invalid JSON: {json}"))?;
+    let clusters: HashMap<String, Vec<String>> =
+        serde_json::from_str(json.as_str()).with_context(|| format!("Invalid JSON: {json}"))?;
     println!("Found databases on {} clusters.", &clusters.len());
 
     let handles: Vec<_> = clusters
@@ -72,7 +67,8 @@ fn main() -> anyhow::Result<()> {
                     println!("Starting thread {i} on {cluster}");
                     loop {
                         let db = {
-                            let mut dbs = dbs_arc.lock()
+                            let mut dbs = dbs_arc
+                                .lock()
                                 .unwrap_or_else(|poisoned| poisoned.into_inner());
                             dbs.pop()
                         };
